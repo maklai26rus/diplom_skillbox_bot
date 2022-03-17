@@ -27,7 +27,6 @@ def command_user(message):
     """Начала программы
     Спрашивает начала заезда
     """
-    HOTEL_BD.logging(message=message, date=str(USER.today), command=message.text)
     if message.text.lower() == '/help':
         [(bot.send_message(message.from_user.id, v)) for v in TEXT['HELPCOMMAND']]
     elif message.text.lower() in TEXT['HELPCOMMAND'][1:4]:  # '/lowprice', '/highprice', '/bestdeal'
@@ -36,6 +35,7 @@ def command_user(message):
         history(message)
     else:
         bot.send_message(message.from_user.id, TEXT['TEXT_GREETING'])
+    HOTEL_BD.logging(message=message, date=str(USER.today), command=message.text)
     USER.cheking = message.text
 
 
@@ -119,11 +119,31 @@ def history(message):
     """Выводим история обращение пользователя """
     command = f"SELECT * FROM USER WHERE user= {message.from_user.id}"
     _history = HOTEL_BD.read_bd(command)
+
     if _history:
+        _request_history = 1
         for v in _history:
-            bot.send_message(message.from_user.id, " ".join(map(str, v[2:])).replace('None', ''))
-    else:
-        bot.send_message(message.from_user.id, TEXT['ERROR_HISTORY'])
+            bot.send_message(message.from_user.id, f'История запроса №{_request_history}')
+            _first_message = f"Дата запроса {v[6]} текс пользователя {v[2]}"
+            bot.send_message(message.from_user.id, _first_message)
+            if v[5].find('None'):
+                _selected_period = f"Выбран период {v[5]}"
+                bot.send_message(message.from_user.id, _selected_period)
+            if v[3].find('None'):
+                _selected_city = f"Выбран город {v[3]}"
+                bot.send_message(message.from_user.id, _selected_city)
+            if v[4].find('None'):
+                _hotel = v[4].split(',')
+                for i in range(len(_hotel)):
+                    command_id = f"""SELECT * FROM HOTEL WHERE Город='{v[3]}' and Отель='{_hotel[i]}'"""
+                    _data_hotel = HOTEL_BD.read_bd(command_id)
+                    bot.send_message(message.from_user.id, f"Просматриваемый отель {_hotel[i]} \n"
+                                                           f"{HOTEL_BD.url_hotel(_data_hotel[0][3])}",
+                                     disable_web_page_preview=True)
+
+                # [bot.send_message(message.from_user.id, f"Просматриваемый отель {_h[i]}") for i in range(len(_h))]
+            bot.send_message(message.from_user.id, '-' * 50)
+            _request_history += 1
 
 
 def how_many_hotels_show(message):
@@ -139,6 +159,7 @@ def how_many_hotels_show(message):
     else:
         bot.send_message(message.from_user.id, TEXT['TEXT_EXPECTATION'])
         USER.dict_city = HOTEL_BD.request_city(message.text.title())
+
         if not USER.dict_city:
             bot.send_message(message.from_user.id, TEXT['ERROR_CITY'])
             bot.register_next_step_handler(message, how_many_hotels_show)
@@ -174,8 +195,8 @@ def processing_number_hotels(message):
         _text = update_text(USER.dict_data_hotel)  # Обновленяемые данные по отолем
 
         _hd = [h[1] for h in USER.dict_data_hotel.values()]
-        HOTEL_BD.logging(message=message, date=USER.today, command=USER.cheking, city=USER.dict_city[0][1],
-                         booking_date=USER.booking_date, hotel=','.join(_hd))
+        # HOTEL_BD.logging(message=message, date=USER.today, command=USER.cheking, city=USER.dict_city[0][1],
+        #                  booking_date=USER.booking_date, hotel=','.join(_hd))
 
         if USER.cheking in TEXT['HELPCOMMAND'][3]:
             _pr = HOTEL_BD.price_range(USER.dict_data_hotel)
@@ -197,8 +218,8 @@ def selection_number_hotels(message):
     """Запрос на обратку нужного кол-во отелей"""
 
     _hd = [h[1] for h in USER.dict_data_hotel.values()]
-    HOTEL_BD.logging(message=message, date=USER.today, command=USER.cheking, city=USER.dict_city[0][1],
-                     booking_date=USER.booking_date, hotel=','.join(_hd))
+    # HOTEL_BD.logging(message=message, date=USER.today, command=USER.cheking, city=USER.dict_city[0][1],
+    #                  booking_date=USER.booking_date, hotel=','.join(_hd))
 
     _text = update_text(USER.dict_data_hotel)
 
@@ -234,8 +255,8 @@ def photo_processing(message):
     """
 
     _hd = [h[1] for h in USER.selected_hotels]
-    HOTEL_BD.logging(message=message, date=USER.today, command=USER.cheking, city=USER.dict_city[0][1],
-                     hotel=','.join(_hd), booking_date=USER.booking_date)
+    # HOTEL_BD.logging(message=message, date=USER.today, command=USER.cheking, city=USER.dict_city[0][1],
+    #                  hotel=','.join(_hd), booking_date=USER.booking_date)
 
     if message.text.lower() in TEXT['HELPCOMMAND']:
         command_user(message)
@@ -259,7 +280,7 @@ def photo_processing(message):
 
             if USER.hotel_counter < len(USER.selected_hotels):
                 bot.send_message(message.chat.id, f"Сколько фотографий: {USER.selected_hotels[USER.hotel_counter][1]},"
-                f"\nпоказать из {len(USER.selected_hotels[USER.hotel_counter][5])}?  : ",
+                                                  f"\nпоказать из {len(USER.selected_hotels[USER.hotel_counter][5])}?  : ",
                                  reply_markup=keybord_foto_nubrer(len(USER.selected_hotels[USER.hotel_counter][5])))
 
                 bot.register_next_step_handler(message, photo_processing)
@@ -286,9 +307,19 @@ def conclusion_by_hotels(message):
     for v in USER.selected_hotels:
         bot.send_message(message.from_user.id,
                          str(v[1] + ' растояния до центра ' + v[3] + ' цена ' + v[4] + '\n'))
-        bot.send_message(message.from_user.id, HOTEL_BD.url_hotel(v[2]))
+        bot.send_message(message.from_user.id, HOTEL_BD.url_hotel(v[2]), disable_web_page_preview=True)
         try:
-            [bot.send_message(message.from_user.id, v[5][i]) for i in range(len(v[5]))]
+            import requests
+            medias = []
+
+            for i in range(len(v[5])):
+                img_data = requests.get(v[5][i][1:-1]).content
+                # v[5][i][1:-1] нужная комбинация приходит в начале и в конце ненужный символ "\"
+                medias.append(telebot.types.InputMediaPhoto(img_data))
+
+            for i in range(0, len(medias), 9):
+                bot.send_media_group(message.chat.id, medias[i:i + 9])
+
         except IndexError:
             continue
 
@@ -297,7 +328,6 @@ def main():
     HOTEL_BD.checking_bd()
 
     bot.infinity_polling()
-    # bot.
 
 
 if __name__ == "__main__":
